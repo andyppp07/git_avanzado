@@ -18,7 +18,7 @@ Static p5.js + ml5.js browser project in early skeleton stage. No build system, 
 ## Running
 
 - No dev server is configured. Plain p5 work can open `index.html` directly; the camera in `js/handpose.js` requires `localhost` (`getUserMedia` is blocked on `file://`), e.g. `python -m http.server 8000`.
-- `HandPose` requests the front camera at 640x480, mirrors the landmarks, and draws them with cover mapping on the fullscreen canvas. The video frame is never drawn, except the small preview behind `?debug=1` (backend, camera and detection stats).
+- `HandPose` requests the front camera at 640x480, mirrors the landmarks, and draws them with contain mapping (fit, no cropping) on the fullscreen canvas. The video frame is never drawn, except the small preview behind `?debug=1` (backend, camera and detection stats).
 
 ## Git workflow
 
@@ -27,5 +27,6 @@ Static p5.js + ml5.js browser project in early skeleton stage. No build system, 
 
 ## Gotchas
 
+- ml5/tfjs `handPose` returns `NaN` keypoints when fed the `HTMLVideoElement` directly (tracking mode). `HandPose` forces `runtimeConfig.staticImageMode = true` and runs its own loop over a canvas frame. Do not switch back to `detectStart(video, ...)`.
 - `HandPose.init()` calls `ml5.setBackend("webgl")` before loading the model: on some Windows GPUs the WebGPU backend returns empty hand detections. The `powerPreference ... requestAdapter()` console warning is harmless.
 - `.atl/skill-registry.md` is auto-generated; do not hand-edit it. Regenerate with `gentle-ai skill-registry refresh --force`.

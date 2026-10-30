@@ -17,6 +17,9 @@ const HandPose = {
   error: null,
   backend: null,
   detections: 0,
+  frameCanvas: null,
+  frameContext: null,
+  detecting: false,
   debug: new URLSearchParams(window.location.search).has("debug"),
 
   // MediaPipe hand landmark connections: 21 keypoints per hand.
@@ -53,11 +56,13 @@ const HandPose = {
 
       this.video = await this.startCamera();
       this.model = await ml5.handPose({ maxHands, flipped: true });
-      this.model.detectStart(this.video, (results) => {
-        this.hands = results || [];
-        this.detections++;
-      });
+
+      // tfjs tracking mode (staticImageMode: false) returns NaN keypoints for
+      // video input. Static mode on a canvas frame returns valid coordinates.
+      this.model.runtimeConfig.staticImageMode = true;
+
       this.ready = true;
+      this.startDetectionLoop();
 
       console.info(
         `[HandPose] ready · backend ${this.backend} · ` +
@@ -101,6 +106,42 @@ const HandPose = {
     return video;
   },
 
+  startDetectionLoop() {
+    this.frameCanvas = document.createElement("canvas");
+    this.frameCanvas.width = this.video.videoWidth || 640;
+    this.frameCanvas.height = this.video.videoHeight || 480;
+    this.frameContext = this.frameCanvas.getContext("2d");
+    this.detecting = true;
+    this.detectLoop();
+  },
+
+  async detectLoop() {
+    while (this.detecting) {
+      if (this.video.readyState >= 2) {
+        this.frameContext.drawImage(
+          this.video,
+          0,
+          0,
+          this.frameCanvas.width,
+          this.frameCanvas.height
+        );
+
+        try {
+          const results = await this.model.detect(this.frameCanvas);
+          this.hands = results || [];
+          this.detections++;
+        } catch (error) {
+          this.error = error;
+          this.detecting = false;
+          console.error("[HandPose]", error);
+          break;
+        }
+      }
+
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    }
+  },
+
   draw() {
     push();
 
@@ -139,11 +180,12 @@ const HandPose = {
     text(message, width / 2, height / 2);
   },
 
-  // Cover mapping: fill the canvas without distortion, centered.
+  // Contain mapping: fit the whole camera frame into the canvas. The black
+  // bars are invisible because the video frame is never drawn.
   getMapping() {
     const videoWidth = this.video.videoWidth || 640;
     const videoHeight = this.video.videoHeight || 480;
-    const scale = Math.max(width / videoWidth, height / videoHeight);
+    const scale = Math.min(width / videoWidth, height / videoHeight);
 
     return {
       scale,
